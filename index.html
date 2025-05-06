@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calendário de Rotina</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f0f0f0;
+      padding: 20px;
+      max-width: 1000px;
+      margin: auto;
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    select, button {
+      padding: 5px;
+    }
+
+    .calendar {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 10px;
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+
+    .day-name, .day {
+      text-align: center;
+      padding: 10px;
+      border-radius: 5px;
+    }
+
+    .day-name {
+      font-weight: bold;
+      background-color: #e0e0e0;
+    }
+
+    .day {
+      background-color: #fafafa;
+      min-height: 80px;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .day:hover {
+      background-color: #dfefff;
+    }
+
+    .modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-content {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      max-width: 400px;
+      width: 90%;
+    }
+
+    label {
+      display: block;
+      margin-top: 10px;
+    }
+
+    input, select, button {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+
+    button {
+      background-color: #4CAF50;
+      color: white;
+      cursor: pointer;
+    }
+
+    .close-btn {
+      background-color: #f44336;
+      color: white;
+      border: none;
+      cursor: pointer;
+      padding: 5px 10px;
+      margin-top: 10px;
+      width: auto;
+      text-align: center;
+    }
+
+    .compromisso {
+      font-size: 0.8em;
+      background: #4CAF50;
+      color: white;
+      padding: 2px 4px;
+      border-radius: 3px;
+      margin-top: 5px;
+      display: block;
+    }
+
+    .compromisso-lista {
+      margin-top: 10px;
+    }
+
+    .compromisso-item {
+      background: #e0ffe0;
+      margin-bottom: 5px;
+      padding: 5px;
+      border-radius: 5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .compromisso-item button {
+      width: auto;
+      background: red;
+      color: white;
+      padding: 2px 6px;
+      margin-left: 10px;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Calendário de Rotina</h1>
+
+  <div class="controls">
+    <select id="mes"></select>
+    <select id="ano"></select>
+    <select id="filtroCategoria">
+      <option value="">Todas as categorias</option>
+    </select>
+    <button onclick="exportarCompromissos()">Exportar compromissos</button>
+  </div>
+
+  <div class="calendar" id="calendar"></div>
+
+  <div class="modal" id="modal">
+    <div class="modal-content">
+      <h3 id="modalDate"></h3>
+      <label for="hora">Hora:</label>
+      <input type="time" id="hora">
+      <label for="descricao">Descrição:</label>
+      <input type="text" id="descricao">
+      <label for="categoria">Categoria:</label>
+      <input type="text" id="categoria">
+      <label for="recorrente">Repetir:</label>
+      <select id="recorrente">
+        <option value="nao">Não</option>
+        <option value="sim">Sim</option>
+      </select>
+      <label for="periodicidade">Periodicidade:</label>
+      <select id="periodicidade">
+        <option value="diario">Diariamente</option>
+        <option value="semanal">Semanalmente</option>
+        <option value="mensal">Mensalmente</option>
+        <option value="anual">Anualmente</option>
+      </select>
+      <button onclick="salvarCompromisso()">Salvar</button>
+      <button class="close-btn" onclick="fecharModal()">Fechar</button>
+      <div class="compromisso-lista" id="listaCompromissos"></div>
+    </div>
+  </div>
+
+  <script>
+    const calendar = document.getElementById('calendar');
+    const modal = document.getElementById('modal');
+    const modalDate = document.getElementById('modalDate');
+    const horaInput = document.getElementById('hora');
+    const descricaoInput = document.getElementById('descricao');
+    const categoriaInput = document.getElementById('categoria');
+    const recorrenteInput = document.getElementById('recorrente');
+    const periodicidadeInput = document.getElementById('periodicidade');
+    const mesSelect = document.getElementById('mes');
+    const anoSelect = document.getElementById('ano');
+    const listaCompromissos = document.getElementById('listaCompromissos');
+    const filtroCategoria = document.getElementById('filtroCategoria');
+
+    let selectedDate = null;
+
+    let compromissos = JSON.parse(localStorage.getItem('compromissos')) || {};
+    let recorrentes = JSON.parse(localStorage.getItem('recorrentes')) || {};
+
+    const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+    for (let i = 0; i < 12; i++) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = meses[i];
+      mesSelect.appendChild(opt);
+    }
+
+    for (let i = 2020; i <= 2100; i++) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = i;
+      anoSelect.appendChild(opt);
+    }
+
+    mesSelect.addEventListener('change', renderCalendar);
+    anoSelect.addEventListener('change', renderCalendar);
+    filtroCategoria.addEventListener('change', renderCalendar);
+
+    function atualizarFiltroCategorias() {
+      const categorias = new Set();
+      Object.values(compromissos).flat().concat(...Object.values(recorrentes)).forEach(c => categorias.add(c.categoria));
+      filtroCategoria.innerHTML = '<option value="">Todas as categorias</option>';
+      categorias.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = cat;
+        filtroCategoria.appendChild(opt);
+      });
+    }
+
+    function renderCalendar() {
+      calendar.innerHTML = '';
+      const ano = parseInt(anoSelect.value);
+      const mes = parseInt(mesSelect.value);
+      const filtro = filtroCategoria.value;
+      const primeiroDia = new Date(ano, mes, 1);
+      const ultimoDia = new Date(ano, mes + 1, 0);
+
+      diasSemana.forEach(dia => {
+        const el = document.createElement('div');
+        el.className = 'day-name';
+        el.textContent = dia;
+        calendar.appendChild(el);
+      });
+
+      for (let i = 0; i < primeiroDia.getDay(); i++) {
+        const vazio = document.createElement('div');
+        calendar.appendChild(vazio);
+      }
+
+      for (let dia = 1; dia <= ultimoDia.getDate(); dia++) {
+        const dataAtual = new Date(ano, mes, dia);
+        const el = document.createElement('div');
+        el.className = 'day';
+        el.textContent = dia;
+        el.onclick = () => abrirModal(dataAtual);
+
+        const chave = dataAtual.toDateString();
+        if (compromissos[chave]) {
+          compromissos[chave].filter(c => !filtro || c.categoria === filtro).forEach(c => {
+            const span = document.createElement('span');
+            span.className = 'compromisso';
+            span.textContent = `${c.hora} - ${c.descricao}`;
+            el.appendChild(span);
+          });
+        }
+
+        const semana = dataAtual.getDay();
+        if (recorrentes[semana]) {
+          recorrentes[semana].filter(c => !filtro || c.categoria === filtro).forEach(c => {
+            const span = document.createElement('span');
+            span.className = 'compromisso';
+            span.textContent = `${c.hora} - ${c.descricao} (recorrente)`;
+            el.appendChild(span);
+          });
+        }
+
+        calendar.appendChild(el);
+      }
+    }
+
+    function abrirModal(data) {
+      selectedDate = data;
+      modalDate.textContent = data.toLocaleDateString();
+      modal.style.display = 'flex';
+      listaCompromissos.innerHTML = '';
+
+      const chave = data.toDateString();
+      if (compromissos[chave]) {
+        compromissos[chave].forEach((c, i) => {
+          const item = document.createElement('div');
+          item.className = 'compromisso-item';
+          item.innerHTML = `${c.hora} - ${c.descricao} (${c.categoria}) <button onclick="excluirCompromisso('${chave}', ${i})">🗑️</button>`;
+          listaCompromissos.appendChild(item);
+        });
+      }
+
+      const semana = data.getDay();
+      if (recorrentes[semana]) {
+        recorrentes[semana].forEach((c, i) => {
+          const item = document.createElement('div');
+          item.className = 'compromisso-item';
+          item.innerHTML = `${c.hora} - ${c.descricao} (${c.categoria}) (recorrente) <button onclick="excluirRecorrente(${semana}, ${i})">🗑️</button>`;
+          listaCompromissos.appendChild(item);
+        });
+      }
+    }
+
+    function fecharModal() {
+      modal.style.display = 'none';
+    }
+
+    function salvarCompromisso() {
+      const hora = horaInput.value;
+      const descricao = descricaoInput.value;
+      const categoria = categoriaInput.value || 'Sem categoria';
+      const repetir = recorrenteInput.value;
+      const periodicidade = periodicidadeInput.value;
+
+      if (!hora || !descricao) return;
+
+      try {
+        if (repetir === 'sim') {
+          if (periodicidade === 'diario') {
+            for (let dia = 1; dia <= 31; dia++) {
+              const data = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), dia);
+              const chave = data.toDateString();
+              if (!compromissos[chave]) compromissos[chave] = [];
+              compromissos[chave].push({ hora, descricao, categoria });
+            }
+          } else if (periodicidade === 'semanal') {
+            const diaSemana = selectedDate.getDay();
+            if (!recorrentes[diaSemana]) recorrentes[diaSemana] = [];
+            recorrentes[diaSemana].push({ hora, descricao, categoria });
+          } else if (periodicidade === 'mensal') {
+            for (let mes = 0; mes < 12; mes++) {
+              const data = new Date(selectedDate.getFullYear(), mes, selectedDate.getDate());
+              const chave = data.toDateString();
+              if (!compromissos[chave]) compromissos[chave] = [];
+              compromissos[chave].push({ hora, descricao, categoria });
+            }
+          } else if (periodicidade === 'anual') {
+            for (let ano = 2020; ano <= 2100; ano++) {
+              const data = new Date(ano, selectedDate.getMonth(), selectedDate.getDate());
+              const chave = data.toDateString();
+              if (!compromissos[chave]) compromissos[chave] = [];
+              compromissos[chave].push({ hora, descricao, categoria });
+            }
+          }
+        } else {
+          const chave = selectedDate.toDateString();
+          if (!compromissos[chave]) compromissos[chave] = [];
+          compromissos[chave].push({ hora, descricao, categoria });
+        }
+
+        localStorage.setItem('compromissos', JSON.stringify(compromissos));
+        localStorage.setItem('recorrentes', JSON.stringify(recorrentes));
+        fecharModal();
+        renderCalendar();
+      } catch (error) {
+        console.error("Erro ao salvar compromisso:", error);
+      }
+    }
+
+    function excluirCompromisso(chave, index) {
+      compromissos[chave].splice(index, 1);
+      localStorage.setItem('compromissos', JSON.stringify(compromissos));
+      renderCalendar();
+    }
+
+    function excluirRecorrente(diaSemana, index) {
+      recorrentes[diaSemana].splice(index, 1);
+      localStorage.setItem('recorrentes', JSON.stringify(recorrentes));
+      renderCalendar();
+    }
+
+    // Inicialização
+    const dataAtual = new Date();
+    anoSelect.value = dataAtual.getFullYear();
+    mesSelect.value = dataAtual.getMonth();
+    renderCalendar();
+    atualizarFiltroCategorias();
+  </script>
+</body>
+</html>
